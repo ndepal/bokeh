@@ -28,34 +28,6 @@ import {difference, sortBy, reversed} from "core/util/array"
 import {keys, values} from "core/util/object"
 import {Context2d, SVGRenderingContext2D} from "core/util/canvas"
 
-export class AbovePanel extends VStack {
-  static initClass(): void {
-    this.prototype.type = "AbovePanel"
-  }
-}
-AbovePanel.initClass()
-
-export class BelowPanel extends VStack {
-  static initClass(): void {
-    this.prototype.type = "BelowPanel"
-  }
-}
-BelowPanel.initClass()
-
-export class LeftPanel extends HStack {
-  static initClass(): void {
-    this.prototype.type = "LeftPanel"
-  }
-}
-LeftPanel.initClass()
-
-export class RightPanel extends HStack {
-  static initClass(): void {
-    this.prototype.type = "RightPanel"
-  }
-}
-RightPanel.initClass()
-
 // Notes on WebGL support:
 // Glyps can be rendered into the original 2D canvas, or in a (hidden)
 // webgl canvas that we create below. In this way, the rest of bokehjs
@@ -123,10 +95,10 @@ export class PlotCanvasView extends DOMView {
 
   protected range_update_timestamp?: number
 
-  protected above_panel: AbovePanel
-  protected below_panel: BelowPanel
-  protected left_panel:  LeftPanel
-  protected right_panel: RightPanel
+  protected top_panel: VStack
+  protected bottom_panel: VStack
+  protected left_panel:  HStack
+  protected right_panel: HStack
 
   // compat, to be removed
   get frame(): CartesianFrame {
@@ -236,18 +208,18 @@ export class PlotCanvasView extends DOMView {
     this.build_levels()
     this.build_tools()
 
-    this.above_panel = new AbovePanel()
-    this.below_panel = new BelowPanel()
-    this.left_panel  = new LeftPanel()
-    this.right_panel = new RightPanel()
+    this.top_panel = new VStack()
+    this.bottom_panel = new VStack()
+    this.left_panel = new HStack()
+    this.right_panel = new HStack()
 
     const layouts = (models: Renderer[]) => {
       return models.map((model) => (this.renderer_views[model.id] as any).__layout) // XXX
     }
 
-    this.above_panel.children = reversed(layouts(this.model.plot.above))
-    this.below_panel.children =          layouts(this.model.plot.below)
-    this. left_panel.children = reversed(layouts(this.model.plot.left))
+    this.top_panel.children = reversed(layouts(this.model.plot.above))
+    this.bottom_panel.children =          layouts(this.model.plot.below)
+    this.left_panel.children = reversed(layouts(this.model.plot.left))
     this.right_panel.children =          layouts(this.model.plot.right)
 
     this.update_dataranges()
@@ -743,14 +715,44 @@ export class PlotCanvasView extends DOMView {
     return true
   }
 
-  protected _above_panel_size?: number
-  protected _below_panel_size?: number
-  protected _left_panel_size?: number
-  protected _right_panel_size?: number
+  size_hint(): SizeHint {
+    const left_hint = this.left_panel.size_hint()
+    const align_left = max(left_hint.width, this.model.min_border_left!)
 
-  suggest_dims(): void {}
+    const right_hint = this.right_panel.size_hint()
+    const align_right = max(right_hint.width, this.model.min_border_right!)
+
+    const top_hint = this.top_panel.size_hint()
+    const align_top = max(top_hint.height, this.model.min_border_top!)
+
+    const bottom_hint = this.bottom_panel.size_hint()
+    const align_bottom = max(bottom_hint.height, this.model.min_border_bottom!)
+
+    const min_width = align_left + 10 + align_right
+    const min_height = align_top + 10 + align_bottom
+
+    // this.model.plot_width
+    // this.model.plot_height
+
+    return {
+      width: min_width,
+      height: min_height,
+      align: {
+        left: align_left,
+        right: align_right,
+        top: align_top,
+        bottom: align_bottom,
+      }
+    }
+  }
 
   update_geometry(): void {
+    super.update_geometry()
+
+    const width = this._width.value
+    const height = this._height.value
+    this.canvas_view.prepare_canvas(width, height)
+
     const inner_top    = this.model._inner_top.value
     const inner_bottom = this.model._inner_bottom.value
     const inner_left   = this.model._inner_left.value
@@ -758,17 +760,10 @@ export class PlotCanvasView extends DOMView {
 
     this.frame.set_geom({left: inner_left, right: inner_right, top: inner_top, bottom: inner_bottom})
 
-    this.above_panel.set_geom({left: inner_left, right: inner_right, bottom: inner_top, height: this.above_panel.get_size()})
-    this.below_panel.set_geom({left: inner_left, right: inner_right, top: inner_bottom, height: this.below_panel.get_size()})
-    this.left_panel .set_geom({top: inner_top, bottom: inner_bottom, right: inner_left, width: this.left_panel.get_size()})
+    this.top_panel.set_geom({left: inner_left, right: inner_right, bottom: inner_top, height: this.top_panel.get_size()})
+    this.bottom_panel.set_geom({left: inner_left, right: inner_right, top: inner_bottom, height: this.bottom_panel.get_size()})
+    this.left_panel.set_geom({top: inner_top, bottom: inner_bottom, right: inner_left, width: this.left_panel.get_size()})
     this.right_panel.set_geom({top: inner_top, bottom: inner_bottom, left: inner_right, width: this.right_panel.get_size()})
-
-    // This allows the plot canvas to be positioned around the toolbar
-    this.el.style.position = "absolute"
-    this.el.style.left     = `${this.model._left.value}px`
-    this.el.style.top      = `${this.model._top.value}px`
-    this.el.style.width    = `${this.model._width.value}px`
-    this.el.style.height   = `${this.model._height.value}px`
 
     this.model.plot.setv({
       inner_width: Math.round(this.frame._width.value),
@@ -793,8 +788,8 @@ export class PlotCanvasView extends DOMView {
   */
 
   protected _needs_layout(): boolean {
-    return this._above_panel_size !== this.above_panel.get_size() ||
-           this._below_panel_size !== this.below_panel.get_size() ||
+    return this._top_panel_size !== this.top_panel.get_size() ||
+           this._bottom_panel_size !== this.bottom_panel.get_size() ||
            this._left_panel_size  !== this.left_panel.get_size()  ||
            this._right_panel_size !== this.right_panel.get_size()
   }
@@ -811,12 +806,6 @@ export class PlotCanvasView extends DOMView {
       return
 
     logger.trace(`PlotCanvas.paint() for ${this.model.id}`)
-
-    // Prepare the canvas size, taking HIDPI into account. Note that this may cause a resize
-    // of the canvas, which means that any previous calls to ctx.save() will be undone.
-    const width = this.model._width.value
-    const height = this.model._height.value
-    this.canvas_view.prepare_canvas(width, height)
 
     const {document} = this.model
     if (document != null) {

@@ -9,7 +9,7 @@ import {find, removeBy, includes} from "core/util/array"
 import {values} from "core/util/object"
 import {isString, isArray} from "core/util/types"
 
-import {LayoutDOM, LayoutDOMView} from "../layouts/layout_dom"
+import {SizeHint, LayoutDOM, LayoutDOMView} from "../layouts/layout_dom"
 import {Title} from "../annotations/title"
 import {LinearScale} from "../scales/linear_scale"
 import {Toolbar} from "../tools/toolbar"
@@ -28,6 +28,38 @@ import {register_with_event, UIEvent} from 'core/bokeh_events'
 
 export class PlotView extends LayoutDOMView {
   model: Plot
+
+  _inner_left: Variable
+  _inner_right: Variable
+  _inner_top: Variable
+  _inner_bottom: Variable
+  _inner_width: Variable
+  _inner_height: Variable
+
+  _offset_right: Variable
+  _offset_bottom: Variable
+
+  initialize(options: any): void {
+    super.initialize(options)
+
+    this._inner_left = new Variable(`${this.toString()}.inner_left`)
+    this._inner_right = new Variable(`${this.toString()}.inner_right`)
+    this._inner_top = new Variable(`${this.toString()}.inner_top`)
+    this._inner_bottom = new Variable(`${this.toString()}.inner_bottom`)
+    this._inner_width = new Variable(`${this.toString()}.inner_width`)
+    this._inner_height = new Variable(`${this.toString()}.inner_height`)
+
+    this._offset_right = new Variable(`${this.toString()}.offset_right`)
+    this._offset_bottom = new Variable(`${this.toString()}.offset_bottom`)
+  }
+
+  size_hint(): SizeHint {
+    return this.plot_canvas_view.size_hint()
+  }
+
+  set_geometry(outer: Geom, inner: Geom): void {
+
+  }
 
   save(name: string): void {
     this.plot_canvas_view.save(name)

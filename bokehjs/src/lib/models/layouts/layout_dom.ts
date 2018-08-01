@@ -6,6 +6,17 @@ import * as p from "core/properties"
 import {build_views} from "core/build_views"
 import {DOMView} from "core/dom_view"
 
+export interface SizeHint {
+  width: number
+  height: number
+  align?: {
+    left: number
+    right: number
+    top: number
+    bottom: number
+  }
+}
+
 export abstract class LayoutDOMView extends DOMView {
   model: LayoutDOM
 
@@ -20,16 +31,6 @@ export abstract class LayoutDOMView extends DOMView {
   _width: Variable
   _height: Variable
 
-  _inner_left: Variable
-  _inner_right: Variable
-  _inner_top: Variable
-  _inner_bottom: Variable
-  _inner_width: Variable
-  _inner_height: Variable
-
-  _offset_right: Variable
-  _offset_bottom: Variable
-
   initialize(options: any): void {
     super.initialize(options)
 
@@ -39,16 +40,6 @@ export abstract class LayoutDOMView extends DOMView {
     this._bottom = new Variable(`${this.toString()}.bottom`)
     this._width = new Variable(`${this.toString()}.width`)
     this._height = new Variable(`${this.toString()}.height`)
-
-    this._inner_left = new Variable(`${this.toString()}.inner_left`)
-    this._inner_right = new Variable(`${this.toString()}.inner_right`)
-    this._inner_top = new Variable(`${this.toString()}.inner_top`)
-    this._inner_bottom = new Variable(`${this.toString()}.inner_bottom`)
-    this._inner_width = new Variable(`${this.toString()}.inner_width`)
-    this._inner_height = new Variable(`${this.toString()}.inner_height`)
-
-    this._offset_right = new Variable(`${this.toString()}.offset_right`)
-    this._offset_bottom = new Variable(`${this.toString()}.offset_bottom`)
 
     this.child_views = {}
     this.build_child_views()
@@ -78,8 +69,12 @@ export abstract class LayoutDOMView extends DOMView {
     console.table(layoutables)
   }
 
-  get_layoutable_children(): LayoutDOM[] {
+  get_layoutable_models(): LayoutDOM[] {
     return []
+  }
+
+  get_layoutable_views(): LayoutDOMView[] {
+    return this.model.get_layoutable_models().map((child) => this.child_views[child.id])
   }
 
   remove(): void {
@@ -120,7 +115,7 @@ export abstract class LayoutDOMView extends DOMView {
     }
   }
 
-  protected _calc_width_height(): [number | null, number | null] {
+  protected _available_space(): [number | null, number | null] {
     let measuring: HTMLElement | null = this.el
 
     while (measuring = measuring.parentElement) {
@@ -143,79 +138,18 @@ export abstract class LayoutDOMView extends DOMView {
       const inner_width = width - left - right
       const inner_height = height - top - bottom
 
-      switch (this.model.sizing_mode) {
-        case "scale_width": {
-          if (inner_width > 0)
-            return [inner_width, inner_height > 0 ? inner_height : null]
-          break
-        }
-        case "scale_height": {
-          if (inner_height > 0)
-            return [inner_width > 0 ? inner_width : null, inner_height]
-          break
-        }
-        case "scale_both":
-        case "stretch_both": {
-          if (inner_width > 0 || inner_height > 0)
-            return [inner_width > 0 ? inner_width : null, inner_height > 0 ? inner_height : null]
-          break
-        }
-        default:
-          throw new Error("unreachable")
-      }
+      if (inner_width > 0 || inner_height > 0)
+        return [inner_width > 0 ? inner_width : null, inner_height > 0 ? inner_height : null]
     }
 
     // this element is detached from DOM
     return [null, null]
   }
 
-  suggest_dims(): void {
-    switch (this.model.sizing_mode) {
-      case "fixed": {
-        // If the width or height is unset:
-        // - compute it from children
-        // - but then save for future use
-        // (for some reason widget boxes keep shrinking if you keep computing
-        // but this is more efficient and appropriate for fixed anyway).
-        let width: number
-        if (this.model.width != null)
-          width = this.model.width
-        else
-          width = this.get_width()
-          this.model.setv({width: width}, {silent: true})
-
-        let height: number
-        if (this.model.height != null)
-          height = this.model.height
-        else
-          height = this.get_height()
-          this.model.setv({height: height}, {silent: true})
-
-        this.solver.suggest_value(this._width, width)
-        this.solver.suggest_value(this._height, height)
-        break
-      }
-      case "scale_width": {
-        const height = this.get_height()
-        this.solver.suggest_value(this._height, height)
-        break
-      }
-      case "scale_height": {
-        const width = this.get_width()
-        this.solver.suggest_value(this._width, width)
-        break
-      }
-      case "scale_both": {
-        const [width, height] = this.get_width_height()
-        this.solver.suggest_value(this._width, width)
-        this.solver.suggest_value(this._height, height)
-        break
-      }
-    }
-  }
+  abstract size_hint(): SizeHint
 
   update_geometry(): void {
-    this.el.style.position = "absolute"
+    this.el.style.position = this.is_root ? "relative" : "absolute"
     this.el.style.left = `${this._left.value}px`
     this.el.style.top = `${this._top.value}px`
     this.el.style.width = `${this._width.value}px`
@@ -227,22 +161,23 @@ export abstract class LayoutDOMView extends DOMView {
   }
 
   layout(): void {
+    /**
+     * Layout's entry point.
+     */
     if (!this.is_root)
-      (this.root as LayoutDOMView).layout()
+      this.root.layout()
     else
       this._do_layout()
   }
 
   protected _do_layout(): void {
+    const [width, height] = this._available_space()
+
+    this.model.width
+    this.model.height
+
     // TODO
     this.notify_finished()
-  }
-
-  protected _layout(): void {
-    for (const child of this.model.get_layoutable_children()) {
-      const child_view = this.child_views[child.id]
-      child_view._layout()
-    }
   }
 
   rebuild_child_views(): void {
